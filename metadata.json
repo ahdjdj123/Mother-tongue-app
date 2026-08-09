@@ -1,0 +1,6 @@
+{
+  "name": "Ona tili",
+  "description": "Zamonaviy o'zbek tili, grammatikasi va yozuv ko'nikmalarini o'rganish platformasi",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

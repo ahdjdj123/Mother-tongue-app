@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Global UI Scale design token system */
+html[data-scale="compact"] {
+  font-size: 14px;
+}
+
+html[data-scale="normal"] {
+  font-size: 16px;
+}
+
+html[data-scale="large"] {
+  font-size: 18px;
+}
