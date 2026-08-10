@@ -17,21 +17,46 @@ export type LessonProgressMap = Record<string, LessonProgress>;
 
 const PROGRESS_STORAGE_KEY = 'ozbek_tili_lesson_progress_v2';
 
-export function loadLessonProgressMap(): LessonProgressMap {
+// In-memory cache to reduce localStorage reads
+let progressCache: LessonProgressMap | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 5000; // 5 seconds cache validity
+
+function getFreshProgressMap(): LessonProgressMap {
+  const now = Date.now();
+  if (progressCache && (now - cacheTimestamp) < CACHE_TTL) {
+    return progressCache;
+  }
+  
   try {
     const data = localStorage.getItem(PROGRESS_STORAGE_KEY);
     if (data) {
-      return JSON.parse(data);
+      progressCache = JSON.parse(data);
+      cacheTimestamp = now;
+      return progressCache;
     }
   } catch (e) {
     console.error('Failed to load lesson progress map:', e);
   }
-  return {};
+  progressCache = {};
+  cacheTimestamp = Date.now();
+  return progressCache;
+}
+
+function invalidateCache(): void {
+  progressCache = null;
+  cacheTimestamp = 0;
+}
+
+export function loadLessonProgressMap(): LessonProgressMap {
+  return getFreshProgressMap();
 }
 
 export function saveLessonProgressMap(map: LessonProgressMap): void {
   try {
     localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(map));
+    progressCache = map;
+    cacheTimestamp = Date.now();
   } catch (e) {
     console.error('Failed to save lesson progress map:', e);
   }
@@ -121,13 +146,18 @@ export function getGradeProgress(gradeNumber: number): {
   percentage: number;
 } {
   const lessons = curriculumData.grades[gradeNumber] || [];
-  const map = loadLessonProgressMap();
+  const map = getFreshProgressMap();
   const total = lessons.length;
   if (total === 0) return { completed: 0, total: 0, percentage: 0 };
 
-  const completed = lessons.filter(
-    (l) => map[l.id] && map[l.id].status === 'completed'
-  ).length;
+  let completed = 0;
+  for (let i = 0; i < lessons.length; i++) {
+    const l = lessons[i];
+    const prog = map[l.id];
+    if (prog && prog.status === 'completed') {
+      completed++;
+    }
+  }
 
   const percentage = Math.round((completed / total) * 100);
   return { completed, total, percentage };
@@ -140,28 +170,29 @@ export function getTotalProgress(): {
   percentage: number;
 } {
   const allLessons = getAllLessonsFlat();
-  const map = loadLessonProgressMap();
+  const map = getFreshProgressMap();
   const total = allLessons.length;
   if (total === 0) return { completed: 0, inProgress: 0, total: 0, percentage: 0 };
 
   let completed = 0;
   let inProgress = 0;
 
-  allLessons.forEach((l) => {
+  for (let i = 0; i < allLessons.length; i++) {
+    const l = allLessons[i];
     const prog = map[l.id];
     if (prog?.status === 'completed') {
       completed++;
     } else if (prog?.status === 'in_progress') {
       inProgress++;
     }
-  });
+  }
 
   const percentage = Math.round((completed / total) * 100);
   return { completed, inProgress, total, percentage };
 }
 
 export function getRecentActiveLesson(): LessonComponent | null {
-  const map = loadLessonProgressMap();
+  const map = getFreshProgressMap();
   const allLessons = getAllLessonsFlat();
 
   const activeEntries = Object.values(map)
@@ -181,14 +212,18 @@ export function getRecentActiveLesson(): LessonComponent | null {
 }
 
 export function getNextUnfinishedLesson(): LessonComponent | null {
-  const map = loadLessonProgressMap();
+  const map = getFreshProgressMap();
   const allLessons = getAllLessonsFlat();
 
-  const unfinished = allLessons.find(
-    (l) => !map[l.id] || map[l.id].status !== 'completed'
-  );
+  for (let i = 0; i < allLessons.length; i++) {
+    const l = allLessons[i];
+    const prog = map[l.id];
+    if (!prog || prog.status !== 'completed') {
+      return l;
+    }
+  }
 
-  return unfinished || allLessons[0] || null;
+  return allLessons[0] || null;
 }
 
 export function syncUserProfileWithProgress(profile: UserProfile): UserProfile {
